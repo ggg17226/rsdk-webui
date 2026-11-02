@@ -5,10 +5,19 @@ import { Button, Card, Chip, Note, StatusPill, ago, bytes, duration } from '../u
 const MAX_CHARS = 400_000
 const VISIBLE_LINES = 2000
 
-export function JobView({ jobId, onBack }: { jobId: string; onBack: () => void }) {
+export function JobView({
+  jobId,
+  onBack,
+  onOpenJob,
+}: {
+  jobId: string
+  onBack: () => void
+  onOpenJob?: (id: string) => void
+}) {
   const [job, setJob] = useState<Job | null>(null)
   const [log, setLog] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
+  const [retrying, setRetrying] = useState(false)
   const preRef = useRef<HTMLPreElement>(null)
   const offsetRef = useRef(0)
 
@@ -121,6 +130,26 @@ export function JobView({ jobId, onBack }: { jobId: string; onBack: () => void }
                 取消
               </Button>
             )}
+            {job && (job.status === 'failed' || job.status === 'cancelled') && job.profile && (
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={retrying}
+                title="用同一份方案重新提交（瞬时网络失败时不用重新过向导）"
+                onClick={async () => {
+                  if (!job.profile) return
+                  setRetrying(true)
+                  try {
+                    const next = await api.startBuild(job.profile)
+                    onOpenJob?.(next.id)
+                  } finally {
+                    setRetrying(false)
+                  }
+                }}
+              >
+                {retrying ? '提交中…' : '重试'}
+              </Button>
+            )}
           </>
         }
       >
@@ -172,17 +201,33 @@ export function JobView({ jobId, onBack }: { jobId: string; onBack: () => void }
       </Card>
 
       <div className="job-sidebar">
-        {job && (job.steps.length > 0 || running) && <Card title="进度" className={`job-progress${running ? ' running' : ''}`}>
+        {job && (job.steps.length > 0 || running) && (
+        <Card
+          title="进度"
+          className={`job-progress${running ? ' running' : ''}`}
+          hint={
+            running
+              ? `当前：${job.steps.at(-1)?.name ?? '等待首个阶段'}${
+                  job.startedAt ? ` · 已 ${duration(job.startedAt)}` : ''
+                }`
+              : undefined
+          }
+        >
           <div className="body">
             {job && job.steps.length > 0 ? (
               <div className="timeline">
-                {job.steps.slice(-14).map((step) => (
-                  <div className="tl-item" key={step.name + step.at}>
-                    <span className="bullet" />
-                    <span>{step.name}</span>
-                    <span className="time">{new Date(step.at).toLocaleTimeString('zh-CN')}</span>
-                  </div>
-                ))}
+                {job.steps.slice(-14).map((step, i, list) => {
+                  // 只有真正结束（succeeded）时全部算完成；跑着的时候最后一条是"进行中"
+                  const active =
+                    i === list.length - 1 && (running || job?.status === 'succeeded')
+                  return (
+                    <div className={`tl-item${active ? ' active' : ' done'}`} key={step.name + step.at}>
+                      <span className="bullet" />
+                      <span>{step.name}</span>
+                      <span className="time">{new Date(step.at).toLocaleTimeString('zh-CN')}</span>
+                    </div>
+                  )
+                })}
               </div>
             ) : (
               <p className="faint" style={{ margin: 0, fontSize: 12.5 }}>
@@ -194,7 +239,8 @@ export function JobView({ jobId, onBack }: { jobId: string; onBack: () => void }
               </p>
             )}
           </div>
-        </Card>}
+        </Card>
+        )}
 
         <Card title="详情">
           <div className="body">

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type Job } from '../api.ts'
 import { Button, Card, Chip, StatusPill, ago, duration } from '../ui.tsx'
 
-export function JobsView({ onOpen }: { onOpen: (id: string) => void }) {
+export function JobsView({ onOpen, onCompose }: { onOpen: (id: string) => void; onCompose?: () => void }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -48,7 +48,17 @@ export function JobsView({ onOpen }: { onOpen: (id: string) => void }) {
 
       <Card title="历史" hint={`${done.length} 条`}>
         {done.length === 0 ? (
-          <div className="empty">还没有构建记录</div>
+          <div className="empty">
+            <div>还没有构建记录。</div>
+            <p className="faint" style={{ margin: '6px 0 14px', fontSize: 12.5 }}>
+              走一遍向导、点「开始构建」，进度和日志就会出现在这里。
+            </p>
+            {onCompose && (
+              <Button variant="primary" onClick={onCompose}>
+                去定制镜像
+              </Button>
+            )}
+          </div>
         ) : (
           <div>
             {done.map((job) => (

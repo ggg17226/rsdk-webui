@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { comboKey, sectorList, socList, type BoardVerdicts, type Product } from '@rsdk-webui/shared'
-import { Card, Chip, Field, Select, TextInput } from '../ui.tsx'
+import { Card, Field, Select, TextInput } from '../ui.tsx'
 import type { StepProps } from './types.ts'
 
 export function TargetStep({ profile, patch, catalog, verdicts }: StepProps) {
@@ -137,14 +137,6 @@ export function TargetStep({ profile, patch, catalog, verdicts }: StepProps) {
                 onChange={(v) => patch({ target: { ...profile.target, imageName: v } })}
               />
             </Field>
-          </div>
-          <div className="body">
-            <div className="chips">
-              <Chip tone="accent">{profile.target.product}</Chip>
-              <Chip>{profile.target.suite}</Chip>
-              <Chip>{profile.target.edition}</Chip>
-              <Chip>{profile.target.sectorSize}B</Chip>
-            </div>
           </div>
         </Card>
 

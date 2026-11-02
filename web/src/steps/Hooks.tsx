@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { slug, type Hook, type OverlayFile } from '@rsdk-webui/shared'
+import { base64ToBytes, slug, type Hook, type OverlayFile } from '@rsdk-webui/shared'
 import { Button, Card, Chip, Field, Note, TextInput, Toggle } from '../ui.tsx'
 import type { StepProps } from './types.ts'
 
@@ -76,7 +76,7 @@ export function HooksStep({ profile, patch }: StepProps) {
   }
 
   return (
-    <div className="grid-2" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
+    <div className="grid-2">
       <Card
         title="覆盖文件"
         hint={`${profile.files.length} 个`}
@@ -112,6 +112,24 @@ export function HooksStep({ profile, patch }: StepProps) {
               {file.encoding === 'base64' ? (
                 <Note tone="info">
                   已上传二进制内容 <span className="mono">{Math.round((file.content.length * 3) / 4)} 字节</span>
+                  {/* 嗅探判成二进制的文件给一条退路：确实是文本（或只带个别怪字节）
+                      时用户不该被迫重新上传 */}
+                  <div style={{ marginTop: 8 }}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const text = decodeAsText(base64ToBytes(file.content))
+                        if (text === null) {
+                          alert('这个文件不是 UTF-8 文本（含 NUL 或非法字节），不能按文本编辑')
+                          return
+                        }
+                        updateFile(file.id, { content: text, encoding: 'utf8', blob: '' })
+                      }}
+                    >
+                      按文本解析
+                    </Button>
+                  </div>
                 </Note>
               ) : (
                 <Field label="文件内容">

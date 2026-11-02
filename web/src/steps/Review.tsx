@@ -98,29 +98,45 @@ export function ReviewStep({ profile, patch, env: baseEnv, goto, mode, verdicts 
   // `engine.ok` unconditionally used to disable the start button for the whole
   // backend-less (Pages) mode, where there is no engine at all.
   const missingPackages = check?.missing.filter((name) => !check.localPackages?.provided.includes(name)) ?? []
-  const blockers: string[] = []
-  if (preflightError) blockers.push('软件源预检失败，请重新检查')
-  else if (!check || checking) blockers.push('软件源预检尚未完成')
-  else if (check.repos.length === 0 && !check.verified) blockers.push('缺少包索引，无法预检')
-  else if (check.suggestTestRepo && !profile.repos.testRepo) blockers.push('需要启用测试源')
-  else if (missingPackages.length > 0) blockers.push(`必需软件包缺失：${missingPackages.join(', ')}`)
+  // 每个阻塞条件尽量带上「去哪修」：文字只说不行、不让用户自己找入口，就是负担
+  const blockers: Array<{ text: string; fix?: { label: string; target: string } }> = []
+  if (preflightError) blockers.push({ text: '软件源预检失败，点上方「重新检查」重试' })
+  else if (!check || checking) blockers.push({ text: '软件源预检尚未完成' })
+  else if (check.repos.length === 0 && !check.verified)
+    blockers.push({ text: '缺少包索引，无法预检', fix: { label: '去建立索引', target: 'packages' } })
+  else if (check.suggestTestRepo && !profile.repos.testRepo)
+    blockers.push({ text: '需要启用测试源（下方可直接打开）' })
+  else if (missingPackages.length > 0)
+    blockers.push({
+      text: `必需软件包缺失：${missingPackages.join(', ')}`,
+      fix: { label: '去软件源', target: 'repos' },
+    })
   if (profile.backend.kind === 'local-docker') {
-    if (!env?.engine.ok) blockers.push('没有可用的容器引擎')
-    if (!env?.image.present) blockers.push('rsdk 容器镜像尚未导入')
+    if (!env?.engine.ok) blockers.push({ text: '没有可用的容器引擎', fix: { label: '去环境准备', target: 'setup' } })
+    if (!env?.image.present)
+      blockers.push({ text: 'rsdk 容器镜像尚未导入', fix: { label: '去环境准备', target: 'setup' } })
   } else {
-    if (!profile.backend.repo) blockers.push('未填写 GitHub 构建仓库')
+    if (!profile.backend.repo)
+      blockers.push({ text: '未填写 GitHub 构建仓库', fix: { label: '去构建后端', target: 'backend' } })
     if (!env?.gh.available) {
-      blockers.push(mode === 'static' ? '还没有连接 GitHub' : 'gh CLI 未登录')
+      blockers.push({
+        text: mode === 'static' ? '还没有连接 GitHub' : 'gh CLI 未登录（终端里 gh auth login）',
+        fix: mode === 'static' ? { label: '去构建后端', target: 'backend' } : undefined,
+      })
     }
-    if (!ghCheck) blockers.push('GitHub 构建仓库尚未检查完成')
-    else if (!ghCheck.ok) blockers.push(ghCheck.message)
+    if (!ghCheck) blockers.push({ text: 'GitHub 构建仓库尚未检查完成' })
+    else if (!ghCheck.ok)
+      blockers.push({ text: ghCheck.message, fix: { label: '去构建后端', target: 'backend' } })
   }
   if (!env?.buildTree.ready) {
-    blockers.push(env?.buildTree.error ?? 'rsdk jsonnet 树不可用')
+    blockers.push({
+      text: env?.buildTree.error ?? 'rsdk jsonnet 树不可用',
+      fix: { label: '去环境准备', target: 'setup' },
+    })
   }
   const verdict = verdicts?.combos[comboKey(profile.target.product, profile.target.suite, profile.target.edition)]
   if (verdict?.status === 'broken') {
-    blockers.push(verdict.hint ?? '这个组合缺包、上游就别想构建出来，换 suite/edition 或板子')
+    blockers.push({ text: verdict.hint ?? '这个组合缺包、上游就别想构建出来，换 suite/edition 或板子' })
   }
 
   return (
@@ -210,6 +226,53 @@ export function ReviewStep({ profile, patch, env: baseEnv, goto, mode, verdicts 
           </Card>
         )}
 
+        <Card title="开始构建">
+          <div className="body">
+            {startError && <div style={{ marginBottom: 12 }}><Note tone="danger">{startError}</Note></div>}
+            {blockers.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <Note tone="warn">
+                  以下条件尚未满足：
+                  <ul style={{ margin: '5px 0 0 16px', padding: 0 }}>
+                    {blockers.map((b) => (
+                      <li key={b.text} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flex: '1 1 auto' }}>{b.text}</span>
+                        {b.fix && (
+                          <button
+                            type="button"
+                            className="btn sm ghost"
+                            style={{ flex: 'none' }}
+                            onClick={() => goto(b.fix!.target)}
+                          >
+                            {b.fix.label} →
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </Note>
+              </div>
+            )}
+            <Button variant="primary" disabled={checking || submitting || blockers.length > 0} onClick={() => void start()}>
+              {submitting ? '提交中…' : '开始构建'}
+            </Button>
+            {started && (
+              <p className="desc">
+                已提交 <span className="mono">{started}</span>
+              </p>
+            )}
+            <hr className="sep" />
+            <p className="desc" style={{ margin: 0 }}>
+              {profile.backend.kind === 'local-docker' ? (
+                <>提交后可以在「构建记录」查看实时日志。生成的 bundle 保存在{' '}
+                  <span className="mono">{env?.server.dataDir}/builds/&lt;job-id&gt;</span>。</>
+              ) : (
+                <>提交后可以在「构建记录」查看进度，构建产物会出现在 GitHub Actions 的 artifact 中。</>
+              )}
+            </p>
+          </div>
+        </Card>
+
         <Card title="将要执行">
           <div className="body">
             <pre className="code wrap">{`rsdk ${renderRsdkArgs(profile).join(' ')}`}</pre>
@@ -261,41 +324,6 @@ export function ReviewStep({ profile, patch, env: baseEnv, goto, mode, verdicts 
               <dt>后端</dt>
               <dd>{profile.backend.kind === 'local-docker' ? `本机 ${profile.backend.engine}` : `GitHub ${profile.backend.repo}`}</dd>
             </dl>
-          </div>
-        </Card>
-
-        <Card title="开始构建">
-          <div className="body">
-            {startError && <div style={{ marginBottom: 12 }}><Note tone="danger">{startError}</Note></div>}
-            {blockers.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <Note tone="warn">
-                  以下条件尚未满足：
-                  <ul style={{ margin: '5px 0 0 16px', padding: 0 }}>
-                    {blockers.map((b) => (
-                      <li key={b}>{b}</li>
-                    ))}
-                  </ul>
-                </Note>
-              </div>
-            )}
-            <Button variant="primary" disabled={checking || submitting || blockers.length > 0} onClick={() => void start()}>
-              {submitting ? '提交中…' : '开始构建'}
-            </Button>
-            {started && (
-              <p className="desc">
-                已提交 <span className="mono">{started}</span>
-              </p>
-            )}
-            <hr className="sep" />
-            <p className="desc" style={{ margin: 0 }}>
-              {profile.backend.kind === 'local-docker' ? (
-                <>提交后可以在「构建记录」查看实时日志。生成的 bundle 保存在{' '}
-                  <span className="mono">{env?.server.dataDir}/builds/&lt;job-id&gt;</span>。</>
-              ) : (
-                <>提交后可以在「构建记录」查看进度，构建产物会出现在 GitHub Actions 的 artifact 中。</>
-              )}
-            </p>
           </div>
         </Card>
 

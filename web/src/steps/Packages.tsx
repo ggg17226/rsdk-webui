@@ -136,7 +136,7 @@ export function PackagesStep({ profile, patch, catalog }: StepProps) {
   }
 
   return (
-    <div className="grid-2" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
+    <div className="grid-2">
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1fr)' }}>
         <Card
           title="附加软件包"

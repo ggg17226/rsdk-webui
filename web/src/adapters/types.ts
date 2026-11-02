@@ -27,6 +27,8 @@ export type Job = {
   backend: 'local-docker' | 'gh-actions' | 'internal'
   profileId?: string
   profileName?: string
+  /** 提交时的方案快照（本地服务端会给），失败后可以原样重试 */
+  profile?: Profile
   createdAt: number
   startedAt?: number
   finishedAt?: number

@@ -254,7 +254,7 @@ code {
 .main {
   min-width: 0;
   min-height: 0;
-  padding: 22px 26px 44px;
+  padding: 22px 26px 0;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
@@ -274,7 +274,15 @@ code {
   grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   align-items: start;
-  max-width: 1340px;
+  max-width: 920px;
+  margin-inline: auto;
+  /* 撑满视口高度，让短步骤的底栏也能贴底而不是浮在内容后面 */
+  min-height: 100%;
+}
+.wizard-layout > div:first-child {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 .wizard-layout.with-preview {
   grid-template-columns: minmax(0, 1fr) 348px;
@@ -282,19 +290,18 @@ code {
 .wizard-layout > * {
   min-width: 0;
 }
+/* 单列堆叠：卡片从上往下排，不做左右并列 */
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
 /* 主内容 + 侧栏的比例放在这里，不要写进 inline style：
    inline 的优先级高于媒体查询，窄窗口折叠单列就失效了。 */
-.grid-2.split-wide {
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
-}
+.grid-2.split-wide,
 .grid-2.split-side {
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .center-screen {
@@ -460,10 +467,12 @@ code {
   display: flex;
   align-items: flex-end;
   gap: 14px;
-  margin: 0 0 20px;
+  /* flex 列里的 auto 外边距会让元素收缩成 fit-content，必须显式给宽度 */
+  width: 100%;
+  margin: 0 auto 20px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
-  max-width: 1340px;
+  max-width: 920px;
 }
 /* 步骤序：等宽小号大写，是页眉的"页码"，不承担色彩层次 */
 .page-head .step-meta {
@@ -491,6 +500,117 @@ code {
 }
 .page-head .spacer {
   flex: 1 1 auto;
+}
+
+/* 首次使用的提示：一行、贴着内容左边，不做成通栏横幅 */
+.welcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 0 14px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--accent-soft);
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+.welcome > span {
+  flex: 1 1 auto;
+}
+.welcome button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.welcome button:hover {
+  text-decoration: underline;
+}
+
+/* -------------------------------------------------------------- structure */
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  /* flex 列里的 auto 外边距会让元素收缩成 fit-content，必须显式给宽度 */
+  width: 100%;
+  margin: 0 auto 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  max-width: 920px;
+}
+/* 步骤序：等宽小号大写，是页眉的"页码"，不承担色彩层次 */
+.page-head .step-meta {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.page-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.page-head p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  max-width: 74ch;
+}
+.page-head .spacer {
+  flex: 1 1 auto;
+}
+
+/* 首次使用的欢迎条：一条就够，关掉后不再出现 */
+.welcome {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 11px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--r);
+  background: var(--accent-soft);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.welcome strong {
+  color: var(--text);
+  margin-right: 4px;
+}
+.welcome > div {
+  flex: 1 1 auto;
+}
+.welcome button {
+  flex: none;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: var(--r);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease-out, color 0.15s ease-out;
+}
+.welcome button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* 卡片：白底 + 柔和分层阴影 + 10px 圆角 */
@@ -533,23 +653,56 @@ code {
 
 /* ----------------------------------------------------------------- fields */
 
+/* 表单行：标签在左、控件在右，一行只放一个选项。
+   参考设置页的常规做法——竖向扫读一列标签，比标签压在每个框上方省一半视觉噪音。
+   标签不能大写：里面带标识符（-k / -f / owner/name / suite），大写会把 -k 写成 -K。 */
 .field {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 116px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 4px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.field:last-child {
+  border-bottom: 0;
+}
+.field:first-child {
+  padding-top: 0;
 }
 .field > label,
 .field > .field-label {
-  font-size: var(--label);
-  font-weight: 650;
-  /* 不能大写：标签里带标识符（-k / -f / owner/name / suite），
-     大写会把 -k 显示成 -K —— 等于把参数名写错了 */
-  letter-spacing: 0.09em;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--text-dim);
+  justify-self: start;
+  /* 对齐控件里的文字，而不是控件盒子的中缝 */
+  padding-top: 7px;
+}
+.field > .field-label {
+  padding-top: 7px;
+}
+.field > input,
+.field > select {
+  max-width: 420px;
+}
+.field > textarea {
+  max-width: 640px;
 }
 .field .desc {
-  font-size: 12px;
+  grid-template-columns: none;
+  grid-column: 2;
+  font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-faint);
+}
+/* 旧结构里「一行两个字段」的容器：摊成一列，避免和横向标签打架 */
+.row:has(> .field) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 input[type='text'],
@@ -775,14 +928,21 @@ input[type='checkbox'] {
   cursor: not-allowed;
 }
 /* 向导底部的操作条：一条细缝把它和表单区隔开 */
+/* 向导底栏：贴住视口底部，滚动时始终可达；
+   以前它跟在内容后面，窗口一矮就掉到折叠线以下 */
 .actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line-soft);
+  margin-top: auto;
+  padding: 22px 0 14px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 /* ------------------------------------------------------------------ chips */
@@ -882,7 +1042,7 @@ input[type='checkbox'] {
   overflow-x: hidden;
   background: var(--bg-elev);
   box-shadow: var(--shadow-card);
-  max-height: min(56vh, 620px);
+  max-height: min(62vh, 700px);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
@@ -897,7 +1057,7 @@ input[type='checkbox'] {
 }
 .board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 15ch) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -937,6 +1097,7 @@ input[type='checkbox'] {
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--text-faint);
+  padding-left: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1163,6 +1324,18 @@ pre.code.log {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+/* 已走过的阶段压暗，当前阶段提亮 —— 扫一眼就知道停在哪，而不是一张"都打勾"的清单 */
+.tl-item.done {
+  color: var(--text-dim);
+}
+.tl-item.done .bullet {
+  opacity: 0.45;
+}
+.tl-item.active {
+  color: var(--text);
+  font-weight: 550;
+}
+
 /* 构建进行中：最后一个节点 = 正在执行的阶段，accent + 脉冲光环 */
 .job-progress.running .tl-item:last-child .bullet {
   background: var(--accent);

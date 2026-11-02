@@ -58,6 +58,7 @@ export default function App() {
   const [mode, setMode] = useState<'server' | 'static' | null>(null)
   const [session, setSession] = useState<GhSession | null>(null)
   const [verdicts, setVerdicts] = useState<BoardVerdicts | null>(null)
+  const [welcomeOff, setWelcomeOff] = useState(() => localStorage.getItem('rsdk-webui.welcome') === 'off')
 
   const refreshEnv = useCallback(async () => {
     try {
@@ -176,6 +177,33 @@ export default function App() {
     }
   }, [step, route.kind, mode, session])
 
+  // 换步骤时回到内容顶部，别让用户在半空中找标题
+  useEffect(() => {
+    document.querySelector('.main')?.scrollTo({ top: 0 })
+  }, [step])
+
+  // 未保存的修改：与 localStorage / 服务端里的同 id 方案对比。
+  // 没保存过的新方案也算「脏」，不然用户不知道切走会丢。
+  // 注意：这两个 hook 必须放在下面所有 early return 之前 —— 一旦某次渲染
+  // 提前返回（无 catalog / 未连接 GitHub），hook 数量就会变，React #300。
+  const dirty = useMemo(() => {
+    if (!profile) return false
+    const stored = saved.find((p) => p.id === profile.id)
+    if (!stored) return true
+    return JSON.stringify(stored) !== JSON.stringify(profile)
+  }, [profile, saved])
+
+  // 刷新 / 关闭标签页的兜底（没有自动草稿，这层提示是唯一的防线）
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   if (mode === 'static' && !session) {
     return (
       <div className="app connect-app">
@@ -213,9 +241,14 @@ export default function App() {
         <div className="rail" />
         <div className="main">
           <Note tone="danger">
-            {fatal}
+            <b>读不到 rsdk 元数据</b>
+            <div className="mono" style={{ marginTop: 6, fontSize: 12 }}>
+              {fatal}
+            </div>
             <div style={{ marginTop: 10 }}>
-              如果还没有导入 rsdk 容器镜像，先到「环境准备」执行导入。
+              板子列表、jsonnet 树都从 rsdk 容器镜像里导出，本机没有可用的 podman/docker
+              时取不到。两条路：装一个容器引擎后重试；或者不装任何东西，直接用 GitHub
+              Pages 上的静态版（构建交给 GitHub Actions）。
             </div>
             <div style={{ marginTop: 12 }}>
               <Button onClick={() => void bootstrap()}>重试</Button>
@@ -249,12 +282,18 @@ export default function App() {
         env,
         goto: (target) => {
           if (target.startsWith('job:')) setRoute({ kind: 'job', id: target.slice(4) })
+          else if (target === 'setup') setRoute({ kind: 'setup' })
           else setStep(target)
         },
       }
     : null
 
   const stepIndex = STEPS.findIndex((s) => s.id === step)
+
+  // 切换方案 / 新建都会整体替换 profile —— 先拦一道，别让编辑静默消失
+  const confirmDiscard = () =>
+    !dirty || confirm('当前方案有未保存的修改，继续会丢失这些改动。要继续吗？')
+
   const currentVerdict = profile
     ? verdicts?.combos[comboKey(profile.target.product, profile.target.suite, profile.target.edition)]
     : undefined
@@ -321,6 +360,7 @@ export default function App() {
               <Button
                 size="sm"
                 onClick={async () => {
+                  if (!confirmDiscard()) return
                   const next = await api.newProfile()
                   setProfile(setForProduct(next))
                   setStep('target')
@@ -328,8 +368,14 @@ export default function App() {
               >
                 新建
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => void save()} disabled={!profile}>
-                保存
+              <Button
+                size="sm"
+                variant={dirty ? 'primary' : 'ghost'}
+                title={dirty ? '有未保存的修改' : '方案已保存'}
+                onClick={() => void save()}
+                disabled={!profile}
+              >
+                保存{dirty ? ' ●' : ''}
               </Button>
             </div>
             {saved.length === 0 && <p className="faint rail-empty">还没有保存过</p>}
@@ -337,7 +383,10 @@ export default function App() {
               <div className="saved-profile-row" key={p.id}>
                 <button
                   className={`step saved-profile${profile?.id === p.id ? ' active' : ''}`}
-                  onClick={() => setProfile(setForProduct(p))}
+                  onClick={() => {
+                    if (!confirmDiscard()) return
+                    setProfile(setForProduct(p))
+                  }}
                   title={`${p.meta.name} · ${p.target.product} · ${p.target.suite}/${p.target.edition}`}
                   aria-label={`打开方案 ${p.meta.name}，${p.target.product}，${p.target.suite}/${p.target.edition}`}
                 >
@@ -403,13 +452,38 @@ export default function App() {
           />
         )}
 
-        {route.kind === 'jobs' && <JobsView onOpen={(id) => setRoute({ kind: 'job', id })} />}
+        {route.kind === 'jobs' && (
+          <JobsView onOpen={(id) => setRoute({ kind: 'job', id })} onCompose={() => setRoute({ kind: 'wizard' })} />
+        )}
 
-        {route.kind === 'job' && <JobView jobId={route.id} onBack={() => setRoute({ kind: 'jobs' })} />}
+        {route.kind === 'job' && (
+          <JobView
+            jobId={route.id}
+            onBack={() => setRoute({ kind: 'jobs' })}
+            onOpenJob={(id) => setRoute({ kind: 'job', id })}
+          />
+        )}
 
         {route.kind === 'wizard' && (
           <div className={`wizard-layout${preview ? ' with-preview' : ''}`}>
             <div>
+              {!welcomeOff && saved.length === 0 && step === 'target' && (
+                <div className="welcome">
+                  <span>
+                    第一次用？每步都有默认值，拿不准就保持默认；右侧「预览生成物」随时能看最终产物。
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="关闭提示"
+                    onClick={() => {
+                      setWelcomeOff(true)
+                      localStorage.setItem('rsdk-webui.welcome', 'off')
+                    }}
+                  >
+                    知道了
+                  </button>
+                </div>
+              )}
               <div className="page-head">
                 <div>
                   <span className="step-meta">
@@ -470,13 +544,15 @@ export default function App() {
                     <Button disabled={stepIndex === 0} onClick={() => setStep(STEPS[Math.max(0, stepIndex - 1)].id)}>
                       ← 上一步
                     </Button>
-                    <Button
-                      variant="primary"
-                      disabled={stepIndex >= STEPS.length - 1}
-                      onClick={() => setStep(STEPS[Math.min(STEPS.length - 1, stepIndex + 1)].id)}
-                    >
-                      下一步 →
-                    </Button>
+                    {stepIndex < STEPS.length - 1 ? (
+                      <Button variant="primary" onClick={() => setStep(STEPS[stepIndex + 1].id)}>
+                        下一步：{STEPS[stepIndex + 1].label} →
+                      </Button>
+                    ) : (
+                      <span className="faint" style={{ alignSelf: 'center' }}>
+                        向导到这里就完了 —— 构建按钮在「开始构建」卡片里
+                      </span>
+                    )}
                     <div className="spacer" />
                     <span className="faint mono" style={{ fontSize: 11.5 }}>
                       {profile.id} · {profile.target.product}/{profile.target.suite}/{profile.target.edition}
