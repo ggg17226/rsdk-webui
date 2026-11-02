@@ -60,10 +60,15 @@ export function renderRsdkArgs(p: Profile): string[] {
   const args: string[] = ['build']
   const { repos, packages, target } = p
 
+  // -M 是"镜像 + suite"直接拼接（…/radxa-deb + bookworm），必须以 / 结尾；
+  // -m 是"镜像 + /debian"，rsdk 自己补斜杠，带了反而变成 //debian。
+  const radxaUrl = (v: string) => (v.endsWith('/') ? v : `${v}/`)
+  const distroUrl = (v: string) => v.replace(/\/+$/, '')
+
   if (repos.testRepo) args.push('--test-repo')
-  if (repos.radxaMirror) args.push('-M', repos.radxaMirror)
+  if (repos.radxaMirror) args.push('-M', radxaUrl(repos.radxaMirror))
   else if (!repos.usePkgsJson) args.push('--no-pkgs-json')
-  if (repos.distroMirror) args.push('-m', repos.distroMirror)
+  if (repos.distroMirror) args.push('-m', distroUrl(repos.distroMirror))
   if (repos.snapshot) args.push('--snapshot', repos.snapshot)
   if (!packages.vendor) args.push('--no-vendor-packages')
   if (packages.kernelOverride) args.push('--override-kernel', packages.kernelOverride)
@@ -692,6 +697,9 @@ else
   echo "!!   探测地址: \$failed_url" >&2
   echo "!!   构建日志里会显示实际使用的源；要禁用回退请在「软件源」里关掉" >&2
   drop_arg ${shq(flag)}
+  # 让 rootfs 缓存键记住「这次用的是回退源」：否则镜像恢复后会复用
+  # 官方源产出的 rootfs，而 profile 声称用的是配置的镜像
+  MIRROR_FALLBACK=1
 fi
 `
 }
@@ -760,6 +768,10 @@ WANT_KEY=${shq(cacheKey)}
 # A replaced image under the same tag must not reuse the old toolchain's rootfs.
 if [[ -n "\${RSDK_TOOLCHAIN_ID:-}" ]]; then
   WANT_KEY="$WANT_KEY:\${RSDK_TOOLCHAIN_ID}"
+fi
+# 回退到官方源的那次构建，产出的 rootfs 不能算在「配置了镜像」的键上
+if [[ "\${MIRROR_FALLBACK:-0}" == "1" ]]; then
+  WANT_KEY="$WANT_KEY:fallback"
 fi
 if [[ "\${RSDK_FORCE_REBUILD:-0}" == "1" ]]; then
   echo "rootfs cache : disabled by RSDK_FORCE_REBUILD"
@@ -851,7 +863,11 @@ if [[ -n "\${RSDK_ENGINE_ARGS:-}" ]]; then
   # shellcheck disable=SC2206
   ARGS=(\$RSDK_ENGINE_ARGS)
 elif [[ -n "\${RSDK_ENGINE_ARGS_FILE:-}" && -f "$HERE/\$RSDK_ENGINE_ARGS_FILE" ]]; then
-  mapfile -t ARGS < "$HERE/\$RSDK_ENGINE_ARGS_FILE"
+  # 不用 mapfile：它是 bash 4+ 的东西，macOS 自带的 /bin/bash 是 3.2，
+  # 会让本机构建在一行都跑不起来（"mapfile: command not found"）
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && ARGS+=("$line")
+  done < "$HERE/\$RSDK_ENGINE_ARGS_FILE"
 fi
 
 RUN_EXTRA=()
@@ -906,7 +922,7 @@ if [[ -c /dev/kvm ]]; then
   esac
 fi
 
-echo "engine : \$ENGINE \${ARGS[*]}"
+echo "engine : \$ENGINE \${ARGS[*]:-}"
 echo "image  : \$IMAGE"
 echo "bundle : \$HERE"
 echo "work   : \$WORK"
@@ -916,7 +932,8 @@ echo
 hand_over() {
   [[ "\$HOST_UID" == "\$CONTAINER_UID" ]] && return 0
   if [[ -z "\$HOST_SUDO" ]]; then
-    echo "run.sh: 容器以 uid \$CONTAINER_UID 运行，而当前用户是 uid \$HOST_UID。" >&2
+    # 变量后面紧跟中文必须加花括号：LANG=C 时 bash 会把汉字首字节算进变量名
+    echo "run.sh: 容器以 uid \$CONTAINER_UID 运行，而当前用户是 uid \${HOST_UID}。" >&2
     echo "run.sh: 设 RSDK_HOST_SUDO=sudo 让它接管 \$WORK 的属主（CI 里都这么做）。" >&2
     return 0
   fi
@@ -932,13 +949,15 @@ take_back() {
 hand_over
 
 set -x
-"\$ENGINE" "\${ARGS[@]}" run --rm \\
+# 数组展开加了 + 守卫：bash 3.2（macOS 自带）在 set -u 下展开空数组会报
+# "unbound variable"，而 ARGS 为空是常态（默认存储根）
+"\$ENGINE" \${ARGS[@]+"\${ARGS[@]}"} run --rm \\
   --name "rsdk-webui-$(basename "$HERE")" \\
   --privileged \\
   --user "\$CONTAINER_UID:\$CONTAINER_UID" \\
   \${GROUP_ARGS[@]+"\${GROUP_ARGS[@]}"} \\
   \${RUN_EXTRA[@]+"\${RUN_EXTRA[@]}"} \\
-  "\${TTY[@]}" \\
+  \${TTY[@]+"\${TTY[@]}"} \\
   -h rsdk-webui \\
   -e TERM=xterm-256color \\
   -e HOME=/home/rsdk \\
@@ -1062,6 +1081,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      # 与 ops/setup.sh / fetch-image.sh 的默认版本保持一致；缓存 key 跟着它走
+      RSDK_WEBUI_IMAGE_VERSION: 0.1.0-1
     steps:
       - uses: actions/checkout@v4
 
@@ -1097,7 +1119,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .rsdk-cache/rsdk-image_*.deb
-          key: rsdk-image-deb-0.1.0-1
+          key: rsdk-image-deb-\${{ env.RSDK_WEBUI_IMAGE_VERSION }}
 
       - name: Free disk space
         run: |

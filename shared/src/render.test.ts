@@ -100,6 +100,20 @@ test('renderRsdkArgs mirrors the documented cli surface', () => {
   ])
 })
 
+test('mirror urls always end with a slash (rsdk concatenates suite onto them)', () => {
+  const bare = renderRsdkArgs(
+    makeProfile({ repos: { radxaMirror: 'https://mirrors.hust.edu.cn/radxa-deb', distroMirror: 'https://mirrors.ustc.edu.cn' } }),
+  )
+  assert.equal(bare[bare.indexOf('-M') + 1], 'https://mirrors.hust.edu.cn/radxa-deb/')
+  assert.equal(bare[bare.indexOf('-m') + 1], 'https://mirrors.ustc.edu.cn')
+
+  const slashed = renderRsdkArgs(
+    makeProfile({ repos: { radxaMirror: 'https://mirrors.lzu.edu.cn/radxa-deb/', distroMirror: 'https://mirrors.tuna.tsinghua.edu.cn/' } }),
+  )
+  assert.equal(slashed[slashed.indexOf('-M') + 1], 'https://mirrors.lzu.edu.cn/radxa-deb/')
+  assert.equal(slashed[slashed.indexOf('-m') + 1], 'https://mirrors.tuna.tsinghua.edu.cn')
+})
+
 test('a third-party radxa mirror disables pkgs.json, -P adds it back', () => {
   const withMirror = renderRsdkArgs(makeProfile({ repos: { radxaMirror: 'https://mirrors.ustc.edu.cn/radxa-deb' } }))
   assert.ok(!withMirror.includes('-P'))

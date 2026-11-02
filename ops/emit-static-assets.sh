@@ -49,7 +49,8 @@ if [[ $ENGINE == podman && "$(stat -f -c %T "$DATA" 2>/dev/null || echo unknown)
     ENGINE_ARGS=(--root "$DATA/podman-root" --runroot "$DATA/podman-run" --storage-driver btrfs)
   fi
 fi
-engine() { "$ENGINE" "${ENGINE_ARGS[@]}" "$@"; }
+# ${arr[@]+…} 守卫：bash 3.2（macOS 自带）在 set -u 下展开空数组会报 unbound
+engine() { "$ENGINE" ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} "$@"; }
 
 log "engine: $ENGINE ${ENGINE_ARGS[*]:-（默认存储）}"
 if ! engine inspect "$IMAGE" >/dev/null 2>&1; then

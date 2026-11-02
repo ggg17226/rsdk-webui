@@ -41,6 +41,8 @@ jobs:
     # uses the same image store
     env:
       RSDK_WEBUI_ENGINE: docker
+      # 与 ops/setup.sh 的默认版本保持一致；改这里缓存 key 跟着变
+      RSDK_WEBUI_IMAGE_VERSION: 0.1.0-1
     steps:
       - uses: actions/checkout@v4
 
@@ -61,7 +63,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/rsdk-webui/cache/rsdk-image_*.deb
-          key: rsdk-image-deb-0.1.0-1
+          key: rsdk-image-deb-${{ env.RSDK_WEBUI_IMAGE_VERSION }}
 
       - name: Load the build container image
         run: ./ops/setup.sh

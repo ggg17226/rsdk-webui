@@ -40,15 +40,18 @@ log "building $TAG from $SRC (rsdk $RSDK_REF)"
 if [[ $RSDK_REF != main ]]; then
   tmp="$(mktemp -d)"
   cp -a "$SRC"/. "$tmp"/
-  sed -i "s#RadxaOS-SDK/rsdk.git#RadxaOS-SDK/rsdk.git -b $RSDK_REF#" "$tmp/Dockerfile"
+  # BSD/macOS 的 sed -i 必须带备份后缀，不能裸用 -i
+  sed -i.bak "s#RadxaOS-SDK/rsdk.git#RadxaOS-SDK/rsdk.git -b $RSDK_REF#" "$tmp/Dockerfile"
+  rm -f "$tmp/Dockerfile.bak"
   SRC="$tmp"
   trap 'rm -rf "$tmp"' EXIT
 fi
 
-"$ENGINE" "${ENGINE_ARGS[@]}" build -t "$TAG" "$SRC"
+# ${arr[@]+…} 守卫：bash 3.2 在 set -u 下展开空数组会报 unbound
+"$ENGINE" ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} build -t "$TAG" "$SRC"
 
 log "verifying"
-"$ENGINE" "${ENGINE_ARGS[@]}" run --rm --entrypoint bash "$TAG" -lc \
+"$ENGINE" ${ENGINE_ARGS[@]+"${ENGINE_ARGS[@]}"} run --rm --entrypoint bash "$TAG" -lc \
   'dpkg-query -W -f="${Package} ${Version}\n" rsdk librtui; jq length /usr/share/rsdk/configs/products.json'
 
 cat <<EOF

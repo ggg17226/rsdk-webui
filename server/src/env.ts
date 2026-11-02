@@ -82,6 +82,10 @@ async function detect(requested?: 'podman' | 'docker'): Promise<Engine | null> {
     if (!ok) continue
 
     const rootless = process.getuid?.() !== 0 && kind === 'podman'
+    // 镜像只有 amd64：arm64 主机（Apple Silicon / ARM 服务器）必须显式指定
+    // 平台，否则 docker 会以 "no matching manifest / exec format error" 拒绝
+    const platformArgs = process.arch === 'arm64' ? ['--platform', 'linux/amd64'] : []
+
     const engine: Engine = {
       kind,
       binary: bin,
@@ -89,7 +93,7 @@ async function detect(requested?: 'podman' | 'docker'): Promise<Engine | null> {
       args,
       // rootless podman needs the host uid kept inside the container so that
       // bind mounts stay writable
-      runExtra: rootless ? ['--userns=keep-id'] : [],
+      runExtra: [...(rootless ? ['--userns=keep-id'] : []), ...platformArgs],
       rootless,
     }
     return engine

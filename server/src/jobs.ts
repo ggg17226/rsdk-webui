@@ -48,10 +48,12 @@ const PHASE_PATTERNS: Array<{ re: RegExp; label: (m: RegExpMatchArray) => string
   { re: /=== \[rsdk-webui\] (.+?) ===/m, label: (m) => `定制: ${m[1]}` },
   { re: /Building (\S+) (\S+) (\S+)\.\.\./m, label: (m) => `构建 ${m[1]} ${m[2]} ${m[3]}` },
   { re: /libguestfs|guestfish/i, label: () => '生成磁盘镜像' },
-  { re: /^(?:I: )?done/i, label: () => '完成' },
+  // 注意别用 /done/ 这种宽匹配：mmdebstrap 每个钩子结束都会打一行 done，
+  // 结果时间线上会在中途冒出「完成」，看起来像是提前结束了。
+  { re: /Image generation finished|Deploy succeeded/i, label: () => '生成磁盘镜像' },
 ]
 
-function extractSteps(chunk: string, existing: JobStep[]): JobStep[] {
+export function extractSteps(chunk: string, existing: JobStep[]): JobStep[] {
   const found: JobStep[] = []
   for (const line of chunk.split(/\r?\n/)) {
     for (const { re, label } of PHASE_PATTERNS) {
@@ -60,7 +62,8 @@ function extractSteps(chunk: string, existing: JobStep[]): JobStep[] {
       const name = label(m)
       const last = existing.at(-1)?.name ?? found.at(-1)?.name
       if (name === last) continue
-      if (found.some((s) => s.name === name)) continue
+      // 同名阶段只记一次，且要同时看已经落盘的和这一批里的
+      if (existing.some((s) => s.name === name) || found.some((s) => s.name === name)) continue
       found.push({ name, at: Date.now() })
       break
     }
@@ -96,10 +99,15 @@ function watchJob(jobId: string): void {
   const finish = (code: number) => {
     const current = getJob(jobId)
     const cancelled = current?.status === 'cancelled'
+    // 「完成」由真实退出码决定，不从日志里猜
+    if (code === 0 && !cancelled && !steps.some((s) => s.name === '完成')) {
+      steps = [...steps, { name: '完成', at: Date.now() }]
+    }
     updateJob(jobId, {
       status: cancelled ? 'cancelled' : code === 0 ? 'succeeded' : 'failed',
       finishedAt: Date.now(),
       exitCode: code,
+      ...(steps.length ? { steps } : {}),
       artifacts: listArtifacts(workDir, `/api/jobs/${jobId}/files`, !!started.workDir),
       ...(code === 0 || cancelled ? {} : { error: `run.sh 退出码 ${code}` }),
     })
@@ -214,7 +222,9 @@ export async function startLocalBuild(profile: Profile, existingId?: string): Pr
     RSDK_ENGINE: engine.kind,
     RSDK_IMAGE: profile.backend.kind === 'local-docker' ? profile.backend.image : config.image,
     RSDK_ENGINE_ARGS: engine.args.join(' '),
-    RSDK_RUN_EXTRA: engine.runExtra.join(' '),
+    // 合并而不是覆盖：start.sh 在 arm64 上会 export --platform linux/amd64，
+    // 用户也可能自己设过 RSDK_RUN_EXTRA，整体覆盖会把它们丢掉
+    RSDK_RUN_EXTRA: [process.env.RSDK_RUN_EXTRA, engine.runExtra.join(' ')].filter(Boolean).join(' '),
     RSDK_NO_TTY: '1',
     // the rootfs cache lives here and is shared by every build of this profile
     RSDK_WORK_DIR: job.workDir,

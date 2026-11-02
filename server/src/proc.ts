@@ -51,15 +51,21 @@ export async function tryRun(cmd: string, args: string[], opts: Parameters<typeo
 }
 
 export function which(bin: string): string | undefined {
+  // Windows: PATH 用 ';' 分隔，可执行文件带 .exe/.cmd 后缀
+  const isWin = process.platform === 'win32'
+  const sep = isWin ? ';' : ':'
+  const exts = isWin ? ['.exe', '.cmd', '.bat', ''] : ['']
   const extra = process.env.PATH ?? ''
-  for (const dir of extra.split(':')) {
+  for (const dir of extra.split(sep)) {
     if (!dir) continue
-    const full = path.join(dir, bin)
-    try {
-      fs.accessSync(full, fs.constants.X_OK)
-      return full
-    } catch {
-      /* keep looking */
+    for (const ext of exts) {
+      const full = path.join(dir, bin + ext)
+      try {
+        fs.accessSync(full, fs.constants.X_OK)
+        return full
+      } catch {
+        /* keep looking */
+      }
     }
   }
   return undefined

@@ -104,12 +104,16 @@ export const KEYBOARD_LAYOUTS = ['us', 'cn', 'gb', 'de', 'fr', 'ru', 'jp', 'kr',
  *
  * 复核：./ops/check-mirrors.py
  */
+// 2026-11-02 在 dev233 实测同一个 u-boot deb 的下载速度：
+//   lzu 16.9 MB/s · nju 14.5 MB/s · aghost 0.3 MB/s · hust 0.01–0.07 MB/s
+//   · 官方 GitHub Pages 0.009 MB/s
+// 顺序即推荐顺序：快的在前，慢的留在列表里但标明，避免用户随手选到坑。
 export const RADXA_MIRRORS = [
-  { label: '官方 radxa-deb (GitHub Pages)', value: '' },
-  { label: 'mirrors.aghost.cn (radxa-deb)', value: 'https://mirrors.aghost.cn/radxa-deb' },
-  { label: 'mirrors.lzu.edu.cn (radxa-deb)', value: 'https://mirrors.lzu.edu.cn/radxa-deb' },
-  { label: 'mirrors.hust.edu.cn (radxa-deb)', value: 'https://mirrors.hust.edu.cn/radxa-deb' },
-  { label: 'mirror.nju.edu.cn (radxa-deb)', value: 'https://mirror.nju.edu.cn/radxa-deb' },
+  { label: 'mirrors.lzu.edu.cn（实测最快）', value: 'https://mirrors.lzu.edu.cn/radxa-deb' },
+  { label: 'mirror.nju.edu.cn（快）', value: 'https://mirror.nju.edu.cn/radxa-deb' },
+  { label: 'mirrors.aghost.cn', value: 'https://mirrors.aghost.cn/radxa-deb' },
+  { label: '官方 radxa-deb (GitHub Pages，国内很慢)', value: '' },
+  { label: 'mirrors.hust.edu.cn（实测极慢）', value: 'https://mirrors.hust.edu.cn/radxa-deb' },
 ]
 
 /** 上面这些站点里实测可用的主机名 —— UI 拿它判断用户手填/旧方案里的地址。 */
@@ -118,13 +122,13 @@ export const RADXA_MIRROR_HOSTS = RADXA_MIRRORS.map((m) => m.value)
   .map((v) => new URL(v).host)
 
 export const DISTRO_MIRRORS = [
-  { label: '上游默认 (deb.debian.org / ports.ubuntu.com)', value: '' },
-  { label: 'mirrors.ustc.edu.cn', value: 'https://mirrors.ustc.edu.cn' },
+  { label: 'mirrors.ustc.edu.cn（实测快）', value: 'https://mirrors.ustc.edu.cn' },
   { label: 'mirrors.tuna.tsinghua.edu.cn', value: 'https://mirrors.tuna.tsinghua.edu.cn' },
   { label: 'mirrors.lzu.edu.cn', value: 'https://mirrors.lzu.edu.cn' },
-  { label: 'mirrors.hust.edu.cn', value: 'https://mirrors.hust.edu.cn' },
   { label: 'mirror.nju.edu.cn', value: 'https://mirror.nju.edu.cn' },
   { label: 'mirror.nyist.edu.cn', value: 'https://mirror.nyist.edu.cn' },
+  { label: 'mirrors.hust.edu.cn（实测慢）', value: 'https://mirrors.hust.edu.cn' },
+  { label: '上游默认 (deb.debian.org / ports.ubuntu.com，国内很慢)', value: '' },
 ]
 
 /** Normalise `soc` (string in rsdk 0.1.0, array upstream) to a list. */
