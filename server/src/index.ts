@@ -281,7 +281,8 @@ export async function buildServer() {
     const { id } = request.params as { id: string }
     const job = getJob(id)
     if (!job) return reply.code(404).send({ error: 'not found' })
-    return stripHeavy(job)
+    // 列表为了瘦身丢掉了 profile；详情页要拿它做「原样重试」，这里补回来
+    return { ...stripHeavy(job), profile: job.profile }
   })
 
   app.post('/api/builds', async (request, reply) => {
@@ -538,6 +539,44 @@ if (process.env.RSDK_WEBUI_NO_LISTEN !== '1') {
     )
     process.exit(1)
   }
+  // 同一个数据目录上起两个实例会互相「接管」任务（一个容器只能有一个主人），
+  // 直接用锁挡住。锁里记 pid 和端口，start.sh 也能据此告诉用户"已经在跑了"。
+  const lockFile = path.join(config.dataDir, 'server.lock')
+  const pidAlive = (pid: number) => {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+  try {
+    const prev = JSON.parse(fs.readFileSync(lockFile, 'utf8')) as { pid?: number; port?: number }
+    if (prev.pid && prev.pid !== process.pid && pidAlive(prev.pid)) {
+      console.error(
+        `拒绝启动：已有实例在跑（pid ${prev.pid}，端口 ${prev.port ?? '?'}，数据目录 ${config.dataDir}）。\n` +
+          `直接打开 http://127.0.0.1:${prev.port ?? config.port} ，或用 RSDK_WEBUI_DATA 换一个数据目录。`,
+      )
+      process.exit(1)
+    }
+  } catch {
+    // 没有锁文件（或内容坏了）：当作可以启动
+  }
+  fs.mkdirSync(config.dataDir, { recursive: true })
+  fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, port: config.port, startedAt: Date.now() }))
+  const releaseLock = () => {
+    try {
+      const cur = JSON.parse(fs.readFileSync(lockFile, 'utf8')) as { pid?: number }
+      if (cur.pid === process.pid) fs.unlinkSync(lockFile)
+    } catch {
+      // 锁文件已被清掉：无所谓
+    }
+  }
+  process.on('exit', releaseLock)
+  const stop = () => process.exit(0)
+  process.on('SIGINT', stop)
+  process.on('SIGTERM', stop)
+
   const app = await buildServer()
   try {
     await app.listen({ host: config.host, port: config.port })
