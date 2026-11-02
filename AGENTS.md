@@ -26,5 +26,8 @@
 - `pnpm -r typecheck` and `pnpm -r test` (shared: node:test, server: vitest).
 - UI changes: `node ops/ui-shot.mjs <url> <out.png>` (headless Chrome over CDP)
   or `pnpm dev`. Measure, do not eyeball — see `ops/ui-shot.mjs --help`.
+- No container engine? `node ops/ui-fixture.mjs` serves `web/dist` with stubbed
+  `/api/*` (8 fake boards, preflight always green) so the whole wizard renders:
+  `pnpm build && node ops/ui-fixture.mjs &` then point ui-shot at :8899.
 - Never use `git checkout <file>` to undo a temporary edit; it also discards
   uncommitted work. Back the file up first.
